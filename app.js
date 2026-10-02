@@ -13,6 +13,16 @@ const authDialog = document.querySelector('#auth-dialog');
 const authForm = document.querySelector('#auth-form');
 const authError = document.querySelector('#auth-error');
 const authHint = document.querySelector('#auth-hint');
+const authUsernameLabel = document.querySelector('label[for="account-username"]');
+const authUsername = document.querySelector('#account-username');
+const authUsernameField = document.querySelector('#account-username-field');
+const authEmailField = document.querySelector('#account-email-field');
+const authEmail = document.querySelector('#account-email');
+const authPassword = document.querySelector('#account-password');
+const authPasswordField = document.querySelector('#account-password-field');
+const authSignupButton = authForm.querySelector('[data-auth-action="signup"]');
+const authLoginButton = authForm.querySelector('[data-auth-action="login"]');
+const forgotPasswordButton = document.querySelector('#forgot-password');
 const accountButton = document.querySelector('#account-button');
 const syncStatus = document.querySelector('#sync-status');
 const searchInput = document.querySelector('#project-search');
@@ -140,16 +150,46 @@ async function syncFromSupabase(user) {
 
 function openAuthDialog() {
 	authError.textContent = '';
+	setAuthMode('login');
 	if (!supabaseClient) {
 		authHint.textContent = hasSupabaseConfig
 			? 'A biblioteca do Supabase não carregou. Confira sua conexão e recarregue a página.'
 			: 'Configure a URL e a chave pública do Supabase em config.js para ativar a sincronização.';
 		for (const button of authForm.querySelectorAll('button[type="submit"]')) button.disabled = true;
 	} else {
-		authHint.textContent = 'Use a mesma conta para acessar sua lista em outros dispositivos. Na primeira vez, crie uma conta.';
 		for (const button of authForm.querySelectorAll('button[type="submit"]')) button.disabled = false;
 	}
 	authDialog.showModal();
+}
+
+function setAuthMode(mode) {
+	const isSignup = mode === 'signup';
+	const isRecovery = mode === 'recovery';
+	const isNewPassword = mode === 'new-password';
+	const title = document.querySelector('#auth-title');
+	title.textContent = isSignup ? 'Criar conta'
+		: isRecovery ? 'Recuperar senha'
+			: isNewPassword ? 'Definir nova senha' : 'Entrar na sua conta';
+	authUsernameLabel.textContent = isSignup ? 'Nome de usuário' : 'Usuário ou e-mail';
+	authUsernameField.hidden = isRecovery || isNewPassword;
+	authUsername.required = !isRecovery && !isNewPassword;
+	authEmailField.hidden = !isSignup && !isRecovery;
+	authEmail.required = isSignup || isRecovery;
+	authPasswordField.hidden = isRecovery;
+	authPassword.required = !isRecovery;
+	authPassword.autocomplete = isSignup || isNewPassword ? 'new-password' : 'current-password';
+	authSignupButton.hidden = isRecovery || isNewPassword;
+	authLoginButton.dataset.authAction = isRecovery ? 'recovery' : isNewPassword ? 'new-password' : 'login';
+	authLoginButton.textContent = isRecovery ? 'Enviar link' : isNewPassword ? 'Salvar senha' : 'Entrar';
+	forgotPasswordButton.hidden = mode !== 'login';
+	authForm.dataset.mode = mode;
+	authError.textContent = '';
+	if (isRecovery || isNewPassword) authPassword.value = '';
+	authHint.textContent = isSignup
+		? 'Escolha um usuário para entrar. O e-mail será usado para confirmar e recuperar sua conta.'
+		: isRecovery ? 'Informe o e-mail cadastrado para receber o link de recuperação.'
+			: isNewPassword ? 'Digite uma nova senha com pelo menos 8 caracteres.'
+				: 'Entre com seu nome de usuário ou com o e-mail já cadastrado.';
 }
 
 async function saveProject(project, isEditing, nextProjects) {
@@ -340,6 +380,15 @@ document.querySelector('#add-project').addEventListener('click', () => openProje
 document.querySelector('#close-dialog').addEventListener('click', () => projectDialog.close());
 document.querySelector('#cancel-dialog').addEventListener('click', () => projectDialog.close());
 document.querySelector('#close-auth-dialog').addEventListener('click', () => authDialog.close());
+for (const button of authForm.querySelectorAll('button[data-auth-action]')) {
+	button.addEventListener('click', () => setAuthMode(button.dataset.authAction));
+}
+forgotPasswordButton.addEventListener('click', () => setAuthMode('recovery'));
+authForm.addEventListener('keydown', (event) => {
+	if (event.key !== 'Enter' || event.target instanceof HTMLTextAreaElement) return;
+	event.preventDefault();
+	authForm.requestSubmit(authForm.dataset.mode === 'signup' ? authSignupButton : authLoginButton);
+});
 
 accountButton.addEventListener('click', async () => {
 	if (!currentUser) {
@@ -366,17 +415,70 @@ authForm.addEventListener('submit', async (event) => {
 
 	authError.textContent = '';
 	const formData = new FormData(authForm);
-	const credentials = {
-		email: String(formData.get('email') || '').trim(),
-		password: String(formData.get('password') || ''),
-	};
-	const isSignup = event.submitter?.dataset.authAction === 'signup';
-	const result = isSignup
-		? await supabaseClient.auth.signUp({
-			...credentials,
-			options: { emailRedirectTo: new URL('.', window.location.href).href },
-		})
-		: await supabaseClient.auth.signInWithPassword(credentials);
+	const mode = authForm.dataset.mode;
+	const isSignup = mode === 'signup';
+	const username = String(formData.get('username') || '').trim().toLowerCase();
+	const password = String(formData.get('password') || '');
+	let result;
+
+	try {
+		if (mode === 'recovery') {
+			const { error } = await supabaseClient.auth.resetPasswordForEmail(
+				String(formData.get('email') || '').trim(),
+				{ redirectTo: new URL('.', window.location.href).href },
+			);
+			if (error) throw error;
+			authHint.textContent = 'Se esse e-mail estiver cadastrado, enviaremos um link para redefinir a senha.';
+			return;
+		}
+		if (mode === 'new-password') {
+			const { data, error } = await supabaseClient.auth.updateUser({ password });
+			if (error) throw error;
+			currentUser = data.user;
+			updateAccountButton();
+			authDialog.close();
+			await syncFromSupabase(currentUser);
+			return;
+		}
+		if (isSignup) {
+			if (!/^[a-z0-9_]{3,24}$/.test(username)) {
+				authError.textContent = 'Use de 3 a 24 caracteres: letras sem acento, números ou _.';
+				return;
+			}
+			result = await supabaseClient.auth.signUp({
+				email: String(formData.get('email') || '').trim(),
+				password,
+				options: {
+					data: { username },
+					emailRedirectTo: new URL('.', window.location.href).href,
+				},
+			});
+		} else if (username.includes('@')) {
+			result = await supabaseClient.auth.signInWithPassword({ email: username, password });
+		} else {
+			const { data, error } = await supabaseClient.functions.invoke('username-login', {
+				body: { username, password },
+			});
+			if (error) {
+				const response = error.context instanceof Response ? error.context : null;
+				const body = response ? await response.clone().json().catch(() => null) : null;
+				authError.textContent = body?.error || (response?.status === 404
+					? 'O login por usuário ainda não foi ativado no Supabase.'
+					: 'Não foi possível entrar. Confira o usuário e a senha.');
+				return;
+			}
+			if (!data?.session) {
+				authError.textContent = 'Não foi possível iniciar a sessão. Tente novamente.';
+				return;
+			}
+			const { data: sessionData, error: sessionError } = await supabaseClient.auth.setSession(data.session);
+			if (sessionError) throw sessionError;
+			result = { data: { user: sessionData.session.user }, error: null };
+		}
+	} catch (error) {
+		authError.textContent = error instanceof Error ? error.message : 'Não foi possível entrar. Tente novamente.';
+		return;
+	}
 
 	if (result.error) {
 		authError.textContent = result.error.message;
@@ -483,6 +585,15 @@ async function initializeSupabaseSync() {
 	setSyncStatus('Verificando sua conta...');
 	supabaseClient.auth.onAuthStateChange((event, session) => {
 		if (event === 'INITIAL_SESSION') return;
+		if (event === 'PASSWORD_RECOVERY') {
+			window.setTimeout(() => {
+				currentUser = session?.user || null;
+				updateAccountButton();
+				setAuthMode('new-password');
+				if (!authDialog.open) authDialog.showModal();
+			}, 0);
+			return;
+		}
 		window.setTimeout(() => {
 			if (!session) {
 				currentUser = null;

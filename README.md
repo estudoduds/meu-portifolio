@@ -9,7 +9,7 @@
 
 1. Entre no painel do Supabase e crie um projeto. Escolha um nome, uma senha forte para o banco e a região mais próxima. A senha do banco é administrada pelo Supabase e não será usada neste site.
 2. Quando o projeto estiver pronto, abra **SQL Editor** no menu lateral e clique em **New query**.
-3. Volte ao VS Code e abra `schema.sql` na lista de arquivos à esquerda. Se não encontrar o arquivo, use **File > Open File...** e navegue até a pasta `meu portifolio`. Com `schema.sql` aberto, clique dentro do código, pressione **Ctrl+A** para selecionar todo o script e **Ctrl+C** para copiá-lo. Volte à aba do navegador com o Supabase, clique na área de texto da consulta **New query** e pressione **Ctrl+V**. Confira se o texto começa com `create table if not exists public.projects` e termina na criação da política `Users manage their own projects`. Não cole o conteúdo em **Table Editor**; ele deve ser executado no **SQL Editor**.
+3. Volte ao VS Code e abra `schema.sql` na lista de arquivos à esquerda. Se não encontrar o arquivo, use **File > Open File...** e navegue até a pasta `meu portifolio`. Com `schema.sql` aberto, clique dentro do código, pressione **Ctrl+A** para selecionar todo o script e **Ctrl+C** para copiá-lo. Volte à aba do navegador com o Supabase, clique na área de texto da consulta **New query** e pressione **Ctrl+V**. Confira se o script cria as tabelas `public.projects` e `public.login_handles` e inclui a política `Users manage their own projects`. Não cole o conteúdo em **Table Editor**; ele deve ser executado no **SQL Editor**.
 4. Clique em **Run**. O script cria a tabela `public.projects`, habilita Row Level Security (RLS), concede operações à função autenticada e cria a política que restringe cada pessoa aos próprios projetos.
 5. No painel **Table Editor**, confirme que existe a tabela `projects`. Não crie uma tabela de usuários: o login fica em **Authentication** do Supabase.
 
@@ -36,11 +36,23 @@ Se a URL ou a chave estiver errada, o app não conseguirá carregar os projetos 
 
 O arquivo `config.js` é a configuração usada pelo frontend. Um `.env` que tenha sobrado da configuração MySQL anterior não é lido pelo app; mantenha-o ignorado pelo Git e não publique senhas antigas do banco.
 
-## Configurar login por e-mail
+## Configurar login com nome de usuário
 
-No painel do Supabase, abra **Authentication > URL Configuration**. Em **Site URL**, informe `http://localhost:3000` para testar localmente. Em **Redirect URLs**, adicione `http://localhost:3000/**`. Quando publicar, configure também a URL HTTPS do site nos dois campos, por exemplo `https://seu-dominio.com` e `https://seu-dominio.com/**`.
+O cadastro pede nome de usuário, e-mail e senha. Depois, a pessoa pode entrar com nome de usuário ou continuar usando o e-mail. O e-mail permanece privado e é usado para confirmação e recuperação. Ao atualizar o schema, contas antigas recebem como usuário o prefixo do e-mail (normalizado); se houver duplicidade, recebem um sufixo numérico. Elas também continuam aceitando o e-mail.
 
-O app usa e-mail e senha do Supabase Auth. Se a confirmação de e-mail estiver habilitada, confirme a mensagem recebida antes de entrar. A URL de redirecionamento deve estar na lista permitida para que a confirmação volte ao app.
+1. Execute novamente o arquivo atualizado `schema.sql` no **SQL Editor** do Supabase para criar a tabela privada de nomes de usuário e associá-los às contas existentes.
+2. No painel Supabase, adicione o segredo `SUPABASE_SECRET_KEY` em **Edge Functions > Secrets**. Use uma chave `secret` ou `service_role`; nunca a coloque em `config.js` ou em qualquer arquivo publicado.
+3. Instale e autentique o Supabase CLI, vincule o projeto e publique a função:
+
+```powershell
+supabase login
+supabase link --project-ref SEU_PROJECT_REF
+supabase functions deploy username-login --no-verify-jwt
+```
+
+O arquivo `supabase/config.toml` mantém a função acessível para login sem sessão prévia. A função valida o usuário no servidor e nunca devolve o e-mail ao navegador. O segredo de servidor fica somente no Supabase.
+
+Em **Authentication > URL Configuration**, permita `http://localhost:3000/**` para testes locais e `https://estudoduds.github.io/meu-portifolio/**` para o site publicado. A confirmação de e-mail deve estar habilitada; confirme a mensagem recebida antes do primeiro login.
 
 ## Abrir no computador
 

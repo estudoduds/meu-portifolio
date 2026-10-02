@@ -141,11 +141,15 @@
 				<button class="close-button" id="close-auth-dialog" type="button" aria-label="Fechar">×</button>
 			</div>
 			<form class="form-grid" id="auth-form">
-				<div class="form-field">
-					<label for="account-email">E-mail</label>
-					<input id="account-email" name="email" type="email" autocomplete="email" required>
+				<div class="form-field" id="account-username-field">
+					<label for="account-username">Usuário ou e-mail</label>
+					<input id="account-username" name="username" type="text" maxlength="254" autocomplete="username" autocapitalize="none" spellcheck="false" required>
 				</div>
-				<div class="form-field">
+				<div class="form-field" id="account-email-field" hidden>
+					<label for="account-email">E-mail</label>
+					<input id="account-email" name="email" type="email" maxlength="254" autocomplete="email">
+				</div>
+				<div class="form-field" id="account-password-field">
 					<label for="account-password">Senha</label>
 					<input id="account-password" name="password" type="password" minlength="8" autocomplete="current-password" required>
 				</div>
@@ -154,6 +158,9 @@
 				<div class="form-actions auth-actions">
 					<button class="secondary-button" type="submit" data-auth-action="signup">Criar conta</button>
 					<button class="primary-button" type="submit" data-auth-action="login">Entrar</button>
+				</div>
+				<div class="auth-recovery-action">
+					<button id="forgot-password" type="button">Esqueci minha senha</button>
 				</div>
 			</form>
 		</div>
