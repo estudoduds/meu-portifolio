@@ -374,7 +374,7 @@ authForm.addEventListener('submit', async (event) => {
 	const result = isSignup
 		? await supabaseClient.auth.signUp({
 			...credentials,
-			options: { emailRedirectTo: window.location.origin },
+			options: { emailRedirectTo: new URL('.', window.location.href).href },
 		})
 		: await supabaseClient.auth.signInWithPassword(credentials);
 
