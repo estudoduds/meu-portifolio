@@ -2,7 +2,7 @@
   "name": "meu-laboratorio",
   "version": "1.0.0",
   "private": true,
-  "description": "Portfólio estático com sincronização Supabase",
+  "description": "Portfólio estático para organizar projetos neste navegador",
   "scripts": {
     "start": "http-server . -p 3000 -c-1"
   },

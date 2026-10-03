@@ -107,9 +107,7 @@ main { min-width: 0; padding: 34px clamp(22px, 5vw, 76px) 64px; }
 .breadcrumb strong { color: var(--ink); font-weight: 700; }
 .today { color: var(--muted); font-family: var(--mono); font-size: 10px; }
 .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
-.sync-status { color: var(--muted); font-size: 10px; }
-.account-button { min-height: 32px; padding: 0 10px; border: 1px solid var(--line); border-radius: 3px; color: var(--green-deep); background: #fff; cursor: pointer; font-size: 10px; font-weight: 800; }
-.account-button:hover { border-color: #9eb5a5; background: #f7faf6; }
+.local-status { color: var(--muted); font-size: 10px; }
 
 .welcome { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; padding: 48px 0 36px; }
 .welcome-copy { max-width: 620px; }
@@ -217,12 +215,8 @@ main { min-width: 0; padding: 34px clamp(22px, 5vw, 76px) 64px; }
 .form-field textarea { min-height: 76px; resize: vertical; }
 .form-field input:focus, .form-field select:focus, .form-field textarea:focus { border-color: #648b70; box-shadow: 0 0 0 2px #648b7026; }
 .form-hint { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
-.auth-hint { min-height: 15px; }
 .form-error { min-height: 14px; margin: 0; color: #aa4437; font-size: 11px; }
 .form-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 5px; }
-.auth-recovery-action { display: flex; justify-content: flex-end; }
-.auth-recovery-action button { padding: 0; border: 0; background: transparent; color: #38634c; cursor: pointer; font-size: 11px; text-decoration: underline; }
-.auth-actions .secondary-button, .auth-actions .primary-button { min-height: 40px; font-size: 11px; }
 .secondary-button { min-height: 40px; padding: 0 14px; border: 1px solid var(--line); border-radius: 3px; background: #fff; cursor: pointer; font-size: 11px; font-weight: 700; }
 .form-actions .primary-button { min-height: 40px; font-size: 11px; }
 
@@ -243,7 +237,7 @@ main { min-width: 0; padding: 34px clamp(22px, 5vw, 76px) 64px; }
 	main { padding: 0 19px 42px; }
 	.topbar { padding: 14px 0; }
 	.topbar-actions { flex-wrap: wrap; gap: 7px; }
-	.sync-status { display: none; }
+	.local-status { display: none; }
 	.welcome { align-items: flex-start; flex-direction: column; gap: 18px; padding: 35px 0 25px; }
 	.welcome h1 { font-size: 34px; }
 	.summary-row { gap: 7px; margin-bottom: 32px; }
