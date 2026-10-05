@@ -1,3 +1,7 @@
 node_modules/
 .env
+.firebase/
 npm-debug.log*
+firebase-debug.log
+/data/projects.json
+_site/

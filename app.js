@@ -1,4 +1,13 @@
-const STORAGE_KEY = 'meu-laboratorio-projetos';
+import {
+	firebaseConfigured,
+	initializeFirebase,
+	watchAuthState,
+	signInWithGoogle,
+	signOutUser,
+	watchProjects,
+	saveProjectsToCloud,
+} from './firebase.js';
+
 const validTypes = new Set(['site', 'experimento', 'rascunho']);
 const projectGrid = document.querySelector('#project-grid');
 const projectForm = document.querySelector('#project-form');
@@ -8,10 +17,15 @@ const searchInput = document.querySelector('#project-search');
 const formError = document.querySelector('#form-error');
 const dialogTitle = document.querySelector('#dialog-title');
 const submitButton = projectForm.querySelector('button[type="submit"]');
+const authButton = document.querySelector('#auth-button');
+const authUser = document.querySelector('#auth-user');
+const addProjectButton = document.querySelector('#add-project');
 const filterButtons = [...document.querySelectorAll('[data-filter]')];
 let activeFilter = 'todos';
 let editingProjectId = null;
-let projects = loadProjects();
+let projects = [];
+let currentUser = null;
+let stopWatchingProjects = null;
 
 function getSafeUrl(value) {
 	const url = value.trim();
@@ -34,19 +48,6 @@ function getSafeUrl(value) {
 	return /^(\.\.\/|\.\/|\/)[^\s]*$/.test(url) ? url : null;
 }
 
-function loadProjects() {
-	try {
-		const storedProjects = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-		if (!Array.isArray(storedProjects)) return [];
-
-		return storedProjects
-			.map(normalizeProject)
-			.filter(Boolean);
-	} catch {
-		return [];
-	}
-}
-
 function normalizeProject(project) {
 	if (!project || typeof project.name !== 'string' || typeof project.url !== 'string') return null;
 	const url = getSafeUrl(project.url);
@@ -66,23 +67,21 @@ function createId() {
 	return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function storeProjects(nextProjects) {
-	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(nextProjects));
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 function setLocalStatus(message) {
 	localStatus.textContent = message;
 }
 
-function persistProjects(nextProjects) {
-	const saved = storeProjects(nextProjects);
-	setLocalStatus(saved ? 'Salvo neste navegador' : 'Falha ao salvar neste navegador');
-	return saved;
+async function persistProjects(nextProjects) {
+	if (!currentUser) return false;
+
+	try {
+		await saveProjectsToCloud(currentUser.uid, nextProjects);
+		setLocalStatus('Salvo na nuvem');
+		return true;
+	} catch {
+		setLocalStatus('Falha ao sincronizar');
+		return false;
+	}
 }
 
 function makeElement(tag, className, text) {
@@ -135,12 +134,12 @@ function createProjectCard(project) {
 	return card;
 }
 
-function removeProject(project) {
+async function removeProject(project) {
 	if (!window.confirm(`Remover "${project.name}" da sua lista?`)) return;
 
 	const nextProjects = projects.filter((item) => item.id !== project.id);
-	if (!persistProjects(nextProjects)) {
-		window.alert('Não foi possível atualizar a lista salva neste navegador.');
+	if (!(await persistProjects(nextProjects))) {
+		window.alert('Não foi possível sincronizar a lista com o Firebase.');
 		return;
 	}
 
@@ -152,18 +151,23 @@ function renderEmptyState(hasSearch) {
 	const emptyState = makeElement('div', 'empty-state');
 	const content = makeElement('div');
 	const hasFilter = activeFilter !== 'todos';
-	const mark = makeElement('div', 'empty-mark', hasSearch || hasFilter ? '⌕' : '+');
-	const title = makeElement('h3', '', hasSearch || hasFilter ? 'Nenhum projeto encontrado' : 'Sua lista começa aqui');
+	const needsSignIn = !currentUser;
+	const mark = makeElement('div', 'empty-mark', needsSignIn ? '↗' : hasSearch || hasFilter ? '⌕' : '+');
+	const title = makeElement('h3', '', needsSignIn
+		? 'Entre na sua conta Google'
+		: hasSearch || hasFilter ? 'Nenhum projeto encontrado' : 'Sua lista começa aqui');
 	const description = makeElement(
 		'p',
 		'',
-		hasSearch || hasFilter
+		needsSignIn
+			? 'Use a mesma conta em todos os dispositivos para acessar seus projetos.'
+			: hasSearch || hasFilter
 			? 'Tente mudar o filtro ou buscar por outro termo.'
 			: 'Adicione o primeiro site ou experimento para deixar tudo organizado num só lugar.',
 	);
 	content.append(mark, title, description);
 
-	if (!hasSearch && !hasFilter) {
+	if (!needsSignIn && !hasSearch && !hasFilter) {
 		const addButton = makeElement('button', 'empty-action', 'Adicionar meu primeiro projeto');
 		addButton.type = 'button';
 		addButton.addEventListener('click', openProjectDialog);
@@ -207,6 +211,7 @@ function resetProjectFormState() {
 }
 
 function openProjectDialog(project = null) {
+	if (!currentUser) return;
 	formError.textContent = '';
 
 	if (project) {
@@ -237,7 +242,7 @@ projectDialog.addEventListener('close', () => {
 	resetProjectFormState();
 });
 
-projectForm.addEventListener('submit', (event) => {
+projectForm.addEventListener('submit', async (event) => {
 	event.preventDefault();
 	const formData = new FormData(projectForm);
 	const url = getSafeUrl(String(formData.get('url') || ''));
@@ -260,8 +265,8 @@ projectForm.addEventListener('submit', (event) => {
 		? projects.map((project) => (project.id === editingProjectId ? { ...project, ...nextProject } : project))
 		: [nextProject, ...projects];
 
-	if (!persistProjects(nextProjects)) {
-		formError.textContent = 'Não foi possível salvar neste navegador. Verifique o espaço disponível.';
+	if (!(await persistProjects(nextProjects))) {
+		formError.textContent = 'Não foi possível salvar na nuvem. Verifique sua conexão e tente novamente.';
 		return;
 	}
 
@@ -306,4 +311,54 @@ const today = document.querySelector('#today');
 today.textContent = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full' }).format(new Date());
 today.dateTime = new Date().toISOString().slice(0, 10);
 
-renderProjects();
+(async () => {
+	addProjectButton.disabled = true;
+	if (!firebaseConfigured) {
+		setLocalStatus('Configure o Firebase para publicar');
+		authButton.disabled = true;
+		renderProjects();
+		return;
+	}
+
+	try {
+		await initializeFirebase();
+		watchAuthState((user) => {
+			currentUser = user;
+			addProjectButton.disabled = !user;
+			authButton.textContent = user ? 'Sair' : 'Entrar com Google';
+			authUser.textContent = user?.displayName || user?.email || '';
+			if (stopWatchingProjects) stopWatchingProjects();
+
+			if (!user) {
+				projects = [];
+				setLocalStatus('Entre para sincronizar seus projetos');
+				renderProjects();
+				return;
+			}
+
+			setLocalStatus('Conectando ao Firestore...');
+			stopWatchingProjects = watchProjects(user.uid, (cloudProjects) => {
+				projects = cloudProjects.map(normalizeProject).filter(Boolean);
+				setLocalStatus('Sincronizado entre dispositivos');
+				renderProjects();
+			}, () => {
+				setLocalStatus('Erro ao carregar projetos');
+			});
+		});
+	} catch {
+		setLocalStatus('Não foi possível conectar ao Firebase');
+		renderProjects();
+	}
+})();
+
+authButton.addEventListener('click', async () => {
+	try {
+		if (currentUser) {
+			await signOutUser();
+		} else {
+			await signInWithGoogle();
+		}
+	} catch {
+		setLocalStatus('Falha na autenticação Google');
+	}
+});
